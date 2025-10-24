@@ -1,0 +1,23 @@
+{
+  "tests": [
+    {
+      "name": "Handle OPTIONS for CORS",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": ""
+    },
+    {
+      "name": "Reject empty messages array",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "messages": []
+      },
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "Messages array is required"
+      }
+    }
+  ]
+}

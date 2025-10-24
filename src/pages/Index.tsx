@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -7,7 +7,8 @@ import Icon from '@/components/ui/icon';
 
 interface Message {
   id: string;
-  text: string;
+  text?: string;
+  imageUrl?: string;
   sender: 'user' | 'ai';
   type: 'text' | 'image';
   timestamp: Date;
@@ -17,7 +18,7 @@ const Index = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Привет! Я AI-ассистент. Могу помочь с текстом или сгенерировать изображение. Просто напиши что нужно!',
+      text: 'Привет! Я AI-ассистент на базе ChatGPT-5. Могу помочь с текстом или сгенерировать изображение через DALL-E 3. Просто напиши что нужно!',
       sender: 'ai',
       type: 'text',
       timestamp: new Date(),
@@ -25,39 +26,29 @@ const Index = () => {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSendMessage = () => {
-    if (!inputValue.trim() || isLoading) return;
-
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      text: inputValue,
-      sender: 'user',
-      type: 'text',
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, newMessage]);
-    setInputValue('');
-    setIsLoading(true);
-
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: 'Это демо-версия чата. Подключите OpenAI API для полноценной работы AI!',
-        sender: 'ai',
-        type: 'text',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiResponse]);
-      setIsLoading(false);
-    }, 1000);
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleGenerateImage = () => {
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const getChatHistory = () => {
+    return messages
+      .filter((m) => m.type === 'text')
+      .map((m) => ({
+        role: m.sender === 'user' ? 'user' : 'assistant',
+        content: m.text || '',
+      }));
+  };
+
+  const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    const newMessage: Message = {
+    const userMessage: Message = {
       id: Date.now().toString(),
       text: inputValue,
       sender: 'user',
@@ -65,21 +56,87 @@ const Index = () => {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages((prev) => [...prev, userMessage]);
+    const currentInput = inputValue;
     setInputValue('');
     setIsLoading(true);
 
-    setTimeout(() => {
+    const chatHistory = [...getChatHistory(), { role: 'user', content: currentInput }];
+
+    const response = await fetch('https://functions.poehali.dev/acbac339-1cf6-4f3b-943d-a5029e037c49', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: chatHistory }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Генерация изображений будет доступна после подключения AI API',
+        text: data.message,
         sender: 'ai',
         type: 'text',
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiResponse]);
-      setIsLoading(false);
-    }, 1500);
+    } else {
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: 'Ошибка при обращении к API. Проверьте что OPENAI_API_KEY добавлен в секреты.',
+        sender: 'ai',
+        type: 'text',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiResponse]);
+    }
+
+    setIsLoading(false);
+  };
+
+  const handleGenerateImage = async () => {
+    if (!inputValue.trim() || isLoading) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: inputValue,
+      sender: 'user',
+      type: 'text',
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    const currentInput = inputValue;
+    setInputValue('');
+    setIsLoading(true);
+
+    const response = await fetch('https://functions.poehali.dev/80e14a51-3a0a-42b0-9b91-8a63d1633491', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: currentInput }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        imageUrl: data.image_url,
+        sender: 'ai',
+        type: 'image',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiResponse]);
+    } else {
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: 'Ошибка при генерации изображения. Проверьте что OPENAI_API_KEY добавлен в секреты.',
+        sender: 'ai',
+        type: 'text',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiResponse]);
+    }
+
+    setIsLoading(false);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -101,7 +158,7 @@ const Index = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-800">AI Chat</h1>
-              <p className="text-sm text-gray-600">Твой умный помощник</p>
+              <p className="text-sm text-gray-600">Powered by ChatGPT-5 & DALL-E 3</p>
             </div>
           </div>
         </header>
@@ -144,9 +201,18 @@ const Index = () => {
                         : 'bg-white text-gray-800 rounded-tl-sm border border-gray-200'
                     }`}
                   >
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                      {message.text}
-                    </p>
+                    {message.type === 'text' && (
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                        {message.text}
+                      </p>
+                    )}
+                    {message.type === 'image' && message.imageUrl && (
+                      <img
+                        src={message.imageUrl}
+                        alt="Generated"
+                        className="rounded-lg max-w-full h-auto"
+                      />
+                    )}
                   </div>
                   <span className="text-xs text-gray-500 px-2">
                     {message.timestamp.toLocaleTimeString('ru-RU', {
@@ -180,6 +246,7 @@ const Index = () => {
                 </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           <div className="border-t border-gray-200 bg-gray-50/50 backdrop-blur-sm p-4">
@@ -188,7 +255,7 @@ const Index = () => {
                 variant="outline"
                 size="sm"
                 className="text-xs hover:bg-gray-100"
-                onClick={() => setInputValue('Расскажи интересный факт')}
+                onClick={() => setInputValue('Расскажи интересный факт про космос')}
               >
                 <Icon name="Lightbulb" size={14} className="mr-1" />
                 Факт
@@ -197,7 +264,7 @@ const Index = () => {
                 variant="outline"
                 size="sm"
                 className="text-xs hover:bg-gray-100"
-                onClick={() => setInputValue('Создай изображение космоса')}
+                onClick={() => setInputValue('Создай изображение космического корабля')}
               >
                 <Icon name="Sparkles" size={14} className="mr-1" />
                 Космос
@@ -206,7 +273,7 @@ const Index = () => {
                 variant="outline"
                 size="sm"
                 className="text-xs hover:bg-gray-100"
-                onClick={() => setInputValue('Помоги написать код')}
+                onClick={() => setInputValue('Помоги написать функцию сортировки')}
               >
                 <Icon name="Code" size={14} className="mr-1" />
                 Код
@@ -228,6 +295,7 @@ const Index = () => {
                 variant="outline"
                 className="flex-shrink-0 hover:bg-gray-100"
                 disabled={isLoading || !inputValue.trim()}
+                title="Сгенерировать изображение"
               >
                 <Icon name="Image" size={20} />
               </Button>
@@ -236,6 +304,7 @@ const Index = () => {
                 size="icon"
                 className="flex-shrink-0 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
                 disabled={isLoading || !inputValue.trim()}
+                title="Отправить сообщение"
               >
                 <Icon name="Send" size={20} />
               </Button>

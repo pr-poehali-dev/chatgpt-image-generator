@@ -1,0 +1,23 @@
+{
+  "tests": [
+    {
+      "name": "Handle OPTIONS for CORS",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": ""
+    },
+    {
+      "name": "Reject empty prompt",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "prompt": ""
+      },
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "Prompt is required"
+      }
+    }
+  ]
+}
