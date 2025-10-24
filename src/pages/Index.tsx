@@ -18,7 +18,7 @@ const Index = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Привет! Я AI-ассистент на базе ChatGPT-5. Могу помочь с текстом или сгенерировать изображение через DALL-E 3. Просто напиши что нужно!',
+      text: 'Привет! Я AI-ассистент на базе YandexGPT. Могу помочь с текстом или сгенерировать изображение через Yandex ART. Просто напиши что нужно!',
       sender: 'ai',
       type: 'text',
       timestamp: new Date(),
@@ -82,7 +82,7 @@ const Index = () => {
     } else {
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Ошибка при обращении к API. Проверьте что OPENAI_API_KEY добавлен в секреты.',
+        text: 'Ошибка при обращении к YandexGPT API. Проверьте что YANDEX_API_KEY и YANDEX_FOLDER_ID добавлены в секреты.',
         sender: 'ai',
         type: 'text',
         timestamp: new Date(),
@@ -128,7 +128,7 @@ const Index = () => {
     } else {
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Ошибка при генерации изображения. Проверьте что OPENAI_API_KEY добавлен в секреты.',
+        text: 'Ошибка при генерации изображения. Проверьте что YANDEX_API_KEY и YANDEX_FOLDER_ID добавлены в секреты.',
         sender: 'ai',
         type: 'text',
         timestamp: new Date(),
@@ -158,7 +158,7 @@ const Index = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-800">AI Chat</h1>
-              <p className="text-sm text-gray-600">Powered by ChatGPT-5 & DALL-E 3</p>
+              <p className="text-sm text-gray-600">Powered by YandexGPT & Yandex ART</p>
             </div>
           </div>
         </header>

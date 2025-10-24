@@ -1,12 +1,11 @@
 import json
 import os
-import httpx
 from typing import Dict, Any, List
-from openai import OpenAI
+import requests
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     '''
-    Business: Process chat messages with ChatGPT-5
+    Business: Process chat messages with YandexGPT
     Args: event - dict with httpMethod, body (messages history)
           context - object with request_id attribute
     Returns: HTTP response with AI message
@@ -35,17 +34,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'body': json.dumps({'error': 'Method not allowed'})
         }
     
-    api_key = os.environ.get('OPENAI_API_KEY')
-    if not api_key:
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'error': 'OpenAI API key not configured'})
-        }
-    
     body_data = json.loads(event.get('body', '{}'))
     messages: List[Dict[str, str]] = body_data.get('messages', [])
     
@@ -59,17 +47,56 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'body': json.dumps({'error': 'Messages array is required'})
         }
     
-    http_client = httpx.Client()
-    client = OpenAI(api_key=api_key, http_client=http_client)
+    api_key = os.environ.get('YANDEX_API_KEY')
+    folder_id = os.environ.get('YANDEX_FOLDER_ID')
     
-    response = client.chat.completions.create(
-        model='gpt-4o',
-        messages=messages,
-        max_tokens=2000,
-        temperature=0.7
-    )
+    if not api_key or not folder_id:
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({'error': 'Yandex API key or Folder ID not configured'})
+        }
     
-    ai_message = response.choices[0].message.content
+    yandex_messages = []
+    for msg in messages:
+        yandex_messages.append({
+            'role': msg['role'],
+            'text': msg['content']
+        })
+    
+    url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
+    headers = {
+        'Authorization': f'Api-Key {api_key}',
+        'Content-Type': 'application/json'
+    }
+    
+    payload = {
+        'modelUri': f'gpt://{folder_id}/yandexgpt-lite/latest',
+        'completionOptions': {
+            'stream': False,
+            'temperature': 0.6,
+            'maxTokens': 2000
+        },
+        'messages': yandex_messages
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code != 200:
+        return {
+            'statusCode': 502,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({'error': f'Yandex API error: {response.text}'})
+        }
+    
+    result = response.json()
+    ai_message = result['result']['alternatives'][0]['message']['text']
     
     return {
         'statusCode': 200,

@@ -1,15 +1,15 @@
 import json
 import os
-import httpx
 from typing import Dict, Any
-from openai import OpenAI
+import requests
+import base64
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     '''
-    Business: Generate images using DALL-E 3
+    Business: Generate images using Yandex ART (YandexGPT Image Generation)
     Args: event - dict with httpMethod, body (prompt)
           context - object with request_id attribute
-    Returns: HTTP response with image URL
+    Returns: HTTP response with image base64
     '''
     method: str = event.get('httpMethod', 'POST')
     
@@ -35,17 +35,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'body': json.dumps({'error': 'Method not allowed'})
         }
     
-    api_key = os.environ.get('OPENAI_API_KEY')
-    if not api_key:
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'error': 'OpenAI API key not configured'})
-        }
-    
     body_data = json.loads(event.get('body', '{}'))
     prompt: str = body_data.get('prompt', '')
     
@@ -59,28 +48,82 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'body': json.dumps({'error': 'Prompt is required'})
         }
     
-    http_client = httpx.Client()
-    client = OpenAI(api_key=api_key, http_client=http_client)
+    api_key = os.environ.get('YANDEX_API_KEY')
+    folder_id = os.environ.get('YANDEX_FOLDER_ID')
     
-    response = client.images.generate(
-        model='dall-e-3',
-        prompt=prompt,
-        size='1024x1024',
-        quality='standard',
-        n=1
-    )
+    if not api_key or not folder_id:
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({'error': 'Yandex API key or Folder ID not configured'})
+        }
     
-    image_url = response.data[0].url
+    url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/imageGenerationAsync'
+    headers = {
+        'Authorization': f'Api-Key {api_key}',
+        'Content-Type': 'application/json'
+    }
+    
+    payload = {
+        'modelUri': f'art://{folder_id}/yandex-art/latest',
+        'generationOptions': {
+            'seed': 17
+        },
+        'messages': [
+            {
+                'weight': 1,
+                'text': prompt
+            }
+        ]
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code != 200:
+        return {
+            'statusCode': 502,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({'error': f'Yandex ART API error: {response.text}'})
+        }
+    
+    result = response.json()
+    operation_id = result['id']
+    
+    check_url = f'https://llm.api.cloud.yandex.net:443/operations/{operation_id}'
+    
+    import time
+    for _ in range(30):
+        time.sleep(2)
+        check_response = requests.get(check_url, headers={'Authorization': f'Api-Key {api_key}'})
+        
+        if check_response.status_code == 200:
+            operation_result = check_response.json()
+            if operation_result.get('done'):
+                image_base64 = operation_result['response']['image']
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'isBase64Encoded': False,
+                    'body': json.dumps({
+                        'image_url': f'data:image/png;base64,{image_base64}',
+                        'request_id': context.request_id
+                    })
+                }
     
     return {
-        'statusCode': 200,
+        'statusCode': 504,
         'headers': {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
         },
-        'isBase64Encoded': False,
-        'body': json.dumps({
-            'image_url': image_url,
-            'request_id': context.request_id
-        })
+        'body': json.dumps({'error': 'Image generation timeout'})
     }
